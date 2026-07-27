@@ -1,3 +1,41 @@
+FROM node:22-trixie-slim AS hamlib-builder-base
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    pkg-config \
+    git \
+    ca-certificates \
+    autoconf \
+    automake \
+    libltdl-dev \
+    libtool \
+    python3-setuptools \
+    build-essential \
+    patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+ADD https://github.com/shankerwangmiao/node-hamlib.git#main /node-hamlib
+ADD --keep-git-dir https://github.com/shankerwangmiao/Hamlib.git#Hamlib-4.7 /hamlib
+
+WORKDIR /node-hamlib
+
+RUN \
+    if [ -n "$HTTP_PROXY" ]; then \
+        export YARN_HTTP_PROXY="$HTTP_PROXY"; \
+    fi && \
+    if [ -n "$HTTPS_PROXY" ]; then \
+        export YARN_HTTPS_PROXY="$HTTPS_PROXY"; \
+    fi && \
+    cp -r /node-hamlib /node-hamlib-build && \
+    cd /node-hamlib-build && \
+    yarn install --frozen-lockfile --ignore-scripts && \
+    HAMLIB_REPO=/hamlib/.git HAMLIB_BRANCH=Hamlib-4.7 \
+        yarn run build:all -- --minimal --verbose && \
+    mv prebuilds /node-hamlib/ && \
+    cd /node-hamlib && \
+    yarn install --frozen-lockfile && \
+    packfile=$(npm pack) && \
+    ln -s "$packfile" "hamlib.tgz"
+
 # TX-5DR Docker Image - Multi-Architecture Support
 # 使用多阶段构建来减小最终镜像大小
 FROM node:22-trixie-slim AS builder-base
@@ -36,6 +74,7 @@ RUN apt-get update && apt-get install -y \
     libhamlib4 \
     git \
     wget \
+    jq \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -70,6 +109,8 @@ COPY --parents \
     packages/web/package.json \
     ./
 
+COPY --from=hamlib-builder-base /node-hamlib/hamlib.tgz /node-hamlib/hamlib.tgz
+
 # 安装依赖（多架构优化）
 RUN echo "Installing dependencies for $(uname -m)..." && \
     if [ -n "$HTTP_PROXY" ]; then \
@@ -80,6 +121,8 @@ RUN echo "Installing dependencies for $(uname -m)..." && \
         export YARN_HTTPS_PROXY="$HTTPS_PROXY"; \
         export ELECTRON_GET_USE_PROXY=1; \
     fi && \
+    jq 'setpath(["resolutions", "hamlib@npm:0.7.6"]; "file:/node-hamlib/hamlib.tgz")' package.json > package.json.tmp && \
+    mv package.json.tmp package.json && \
     yarn install --immutable --network-timeout 300000 || { \
         echo "Immutable install failed, trying fallback..." && \
         yarn install --network-timeout 300000; \
