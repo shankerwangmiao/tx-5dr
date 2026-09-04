@@ -3130,6 +3130,19 @@ export class HamlibConnection
     return this.runSerializedTask('getCtcssTone', async () => {
       this.checkConnected();
       try {
+        if (this.supportedFunctions.has('TONE')) {
+          const value = (await Promise.race([
+            this.rig!.getFunction('TONE'),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Get CTCSS tone timeout')), 5000)
+            ),
+          ])) as boolean;
+          this.lastSuccessfulOperation = Date.now();
+          if (!value) {
+            // If the radio reports that CTCSS is disabled, return 0 to indicate no tone.
+            return 0;
+          }
+        }
         const value = (await Promise.race([
           this.rig!.getCtcssTone(),
           new Promise<never>((_, reject) =>
@@ -3148,6 +3161,17 @@ export class HamlibConnection
     await this.runSerializedTask('setCtcssTone', async () => {
       this.checkConnected();
       try {
+        if (this.supportedFunctions.has('TONE') && tone === 0) {
+          await Promise.race([
+            this.rig!.setFunction('TONE', false),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Disable CTCSS tone timeout')), 5000)
+            ),
+          ]);
+          this.lastSuccessfulOperation = Date.now();
+          logger.debug('CTCSS tone disabled');
+          return;
+        }
         await Promise.race([
           this.rig!.setCtcssTone(tone),
           new Promise<never>((_, reject) =>
@@ -3156,6 +3180,16 @@ export class HamlibConnection
         ]);
         this.lastSuccessfulOperation = Date.now();
         logger.debug('CTCSS tone set', { tone });
+        if (this.supportedFunctions.has('TONE')) {
+          await Promise.race([
+            this.rig!.setFunction('TONE', true),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Enable CTCSS tone timeout')), 5000)
+            ),
+          ]);
+          this.lastSuccessfulOperation = Date.now();
+          logger.debug('CTCSS tone enabled');
+        }
       } catch (error) {
         throw this.convertOptionalOperationError(error, 'setCtcssTone');
       }
@@ -3184,6 +3218,19 @@ export class HamlibConnection
     return this.runSerializedTask('getDcsCode', async () => {
       this.checkConnected();
       try {
+        if (this.supportedFunctions.has('CSQL')) {
+          const value = (await Promise.race([
+            this.rig!.getFunction('CSQL'),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Get DCS code function timeout')), 5000)
+            ),
+          ])) as boolean;
+          this.lastSuccessfulOperation = Date.now();
+          if (!value) {
+            // If the radio reports that DCS is disabled, return 0 to indicate no code.
+            return 0;
+          }
+        }
         const value = (await Promise.race([
           this.rig!.getDcsCode(),
           new Promise<never>((_, reject) =>
@@ -3202,6 +3249,17 @@ export class HamlibConnection
     await this.runSerializedTask('setDcsCode', async () => {
       this.checkConnected();
       try {
+        if (this.supportedFunctions.has('CSQL') && code === 0) {
+          await Promise.race([
+            this.rig!.setFunction('CSQL', false),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Disable DCS code function timeout')), 5000)
+            ),
+          ]);
+          this.lastSuccessfulOperation = Date.now();
+          logger.debug('DCS code disabled');
+          return;
+        }
         await Promise.race([
           this.rig!.setDcsCode(code),
           new Promise<never>((_, reject) =>
@@ -3210,6 +3268,16 @@ export class HamlibConnection
         ]);
         this.lastSuccessfulOperation = Date.now();
         logger.debug('DCS code set', { code });
+        if (this.supportedFunctions.has('CSQL')) {
+          await Promise.race([
+            this.rig!.setFunction('CSQL', true),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Enable DCS code function timeout')), 5000)
+            ),
+          ]);
+          this.lastSuccessfulOperation = Date.now();
+          logger.debug('DCS code function enabled');
+        }
       } catch (error) {
         throw this.convertOptionalOperationError(error, 'setDcsCode');
       }
